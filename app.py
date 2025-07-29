@@ -1,64 +1,39 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import LabelEncoder
 
-st.set_page_config(page_title="House Rent Prediction", layout="wide")
+# Title
 st.title("🏠 House Rent Prediction App")
 
-# Upload CSV
-uploaded_file = st.file_uploader("📁 Upload CSV file", type=["csv"])
+# Load CSV file
+@st.cache_data
+def load_data():
+    df = pd.read_csv("rent.csv")
+    return df
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.subheader("📊 Dataset Preview")
-    st.write(df.head())
+df = load_data()
 
-    st.subheader("📈 Visualizations")
+# Encode 'Location' column
+le = LabelEncoder()
+df['Location'] = le.fit_transform(df['Location'])
 
-    # Plot Size vs Rent if present
-    if 'Size' in df.columns and 'Rent' in df.columns:
-        fig1, ax1 = plt.subplots()
-        sns.scatterplot(x='Size', y='Rent', data=df, ax=ax1)
-        ax1.set_title("Size vs Rent")
-        st.pyplot(fig1)
+# Model Training
+X = df[['Size', 'BHK', 'Location']]
+y = df['Rent']
+model = LinearRegression()
+model.fit(X, y)
 
-    # Plot City distribution
-    if 'City' in df.columns:
-        fig2, ax2 = plt.subplots(figsize=(10, 4))
-        sns.countplot(data=df, x='City', order=df['City'].value_counts().index[:10], ax=ax2)
-        ax2.set_title("Top Cities by Listings")
-        ax2.tick_params(axis='x', rotation=45)
-        st.pyplot(fig2)
+# User Input
+st.header("📋 Enter House Details:")
 
-    # ML Model
-    st.subheader("🤖 Build Rent Prediction Model")
+size = st.slider("Size (sq. ft.)", min_value=300, max_value=5000, step=50, value=1000)
+bhk = st.selectbox("BHK", sorted(df['BHK'].unique()))
+location = st.selectbox("Location", le.classes_)
 
-    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-
-    if len(numeric_cols) >= 2:
-        x_feature = st.selectbox("Select Feature (X)", numeric_cols)
-        y_target = st.selectbox("Select Target (Y)", [col for col in numeric_cols if col != x_feature])
-
-        X = df[[x_feature]]
-        y = df[y_target]
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-
-        st.success(f"✅ Model Trained! MSE: {mean_squared_error(y_test, y_pred):.2f}")
-
-        input_val = st.number_input(f"Enter {x_feature} to predict {y_target}")
-        if input_val:
-            prediction = model.predict(np.array([[input_val]]))[0]
-            st.info(f"📌 Predicted {y_target}: ₹{prediction:.2f}")
-    else:
-        st.warning("❗ Dataset should have at least 2 numeric columns.")
-else:
-    st.info("Upload a CSV file to get started.")
+# Predict Button
+if st.button("Predict Rent"):
+    location_encoded = le.transform([location])[0]
+    input_data = pd.DataFrame([[size, bhk, location_encoded]], columns=['Size', 'BHK', 'Location'])
+    prediction = model.predict(input_data)[0]
+    st.success(f"💰 Estimated Rent: ₹{int(prediction):,} per month")
